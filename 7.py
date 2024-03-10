@@ -1,6 +1,9 @@
 from collections import UserDict
 import datetime as dt
 from datetime import datetime as dtdt
+from prettytable import PrettyTable
+import random
+
 
 class Field:
     def __init__(self, value):
@@ -18,6 +21,9 @@ class Name(Field):
 
     def __hash__(self):
         return hash(self.value)
+    
+    def __str__(self):
+        return f'{self.value}'
 
 class Phone(Field):
     def __init__(self, value: str):
@@ -29,31 +35,35 @@ class Phone(Field):
     def is_valid_number(number: str):
         return str(number).isdigit() and len(str(number)) == 10
     
+    def __str__(self):
+        return f'{self.value}'
+    
 class Birthday(Field):
     def __init__(self, value):
         try:
-            self.value=dtdt.strptime(value, "%Y.%m.%d").date()
+            self.value=dtdt.strptime(value, "%d.%m.%Y").date()
         except ValueError:
             raise ValueError("Invalid date format. Use DD.MM.YYYY")
-
+    
+    def __str__(self):
+        return self.value.strftime('%d.%m.%Y')
+    
 class Record:
-    def __init__(self, name: str,phone=None):
+    def __init__(self, name: str,phone=None, birthday=None):
         self.name = Name(name)
         if phone==None:
             self.phones = []
         else:
             _phone=Phone(phone)
             self.phones = [_phone]
-        self.birthday=None
+        self.birthday=birthday
     
     def add_phone(self,phone: str):
-        flag=1
         for ph in self.phones:
             if ph.value==phone:
-                flag=0
-                break
-        if flag:
-            self.phones.append(Phone(phone))
+                return 0
+        self.phones.append(Phone(phone))
+        return 1
         
     def remove_phone(self, phone: str):
         for ph in self.phones:
@@ -64,7 +74,7 @@ class Record:
     def edit_phone(self,old_phone: str, new_phone: str):
         for ph in self.phones:
             if ph.value==old_phone:
-                ph.value = new_phone
+                ph = Phone(new_phone)
                 return 1
         return 0
         
@@ -77,7 +87,7 @@ class Record:
         self.birthday=Birthday(birthday)
             
     def __str__(self):
-        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}, birthday {self.birthday.value}"
+        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
     
 class AddressBook(UserDict):      
     def add_record(self, record: Record):
@@ -86,21 +96,45 @@ class AddressBook(UserDict):
     def find(self,name: str):
         return self.data.get(name,None)
          
-
     def delete(self,name):
-        del self.data[name]
-    
-    def edit_record(self,name,old_phone,new_phone) -> str:
-        for contact in self.data:
-            if contact==name:
-                contact.edit_phone(Phone(old_phone),Phone(new_phone)) 
-                return 'Record change'
-        return 'Record not found'  
+        del self.data[name] 
                 
     def show_all(self):
-        for contact in self.data.values():
-            print(contact)
+        table = PrettyTable()
+        table.field_names = ['Name','Phones']
 
+        for contact in self.data.values():
+            ph = '\n'.join(p.value for p in contact.phones)
+            table.add_row([contact.name,ph])
+        return table
+    
+    def birthdays(self):
+        # congratulation list
+        clist=[]
+        # congratulation week
+        # today = begin
+        # today + 7 days = end
+        begin= dtdt.today().date()
+        end=dtdt.fromordinal(7+dtdt.toordinal(begin)).date()
+        for i in self.data.values():
+            # temp - birthday in current year
+            temp=dtdt.strptime(i.birthday, "%d.%m.%Y").date().replace(year=begin.year)
+            if temp>=begin and temp<=end:
+                if temp.weekday()==5:
+                    c=temp.replace(day=temp.day+2)
+                    temp=c
+                if temp.weekday()==6:
+                    c=temp.replace(day=temp.day+1)
+                    temp=c
+                clist.append({'name':i.name, 'congratulation_date':dtdt.strftime(temp, "%d.%m.%Y")})
+
+        table = PrettyTable()
+        table.field_names = ['Name','Congratulation date']
+
+        for contact in clist:
+            table.add_row([contact['name'],contact['congratulation_date']])
+        return table
+    
 def input_error(func):
     def inner(*args, **kwargs):
         try:
@@ -126,14 +160,14 @@ def parse_input(user_input):
 def add_record(args, book: AddressBook):
     name, phone = args
     record = book.find(name)
-    message = "Contact updated."
     if record is None:
-        record = Record(name)
+        record = Record(name,phone)
         book.add_record(record)
-        message = "Contact added."
-    if phone:
-        record.add_phone(phone)
-    return message
+        return "Contact added."
+    if record.add_phone(phone):
+        return "Contact updated."
+    else:
+        return 'Phone already recorded.'
 
 @input_error
 def edit_phone(args, contacts):
@@ -145,18 +179,6 @@ def edit_phone(args, contacts):
         if contacts[name].edit_phone(old_phone,new_phone):
             return "Record change."
     return 'Record not found'
-
-@input_error
-def add_phone(args, contacts):
-    if len(args)==2:
-        name, phone = args
-    else :
-        raise ValueError ('Insufficient parameters')
-    if name in contacts:
-        contacts[name].add_phone(phone)
-        return "Phone add."
-    else:
-        return 'Record not found'
 
 @input_error
 def delete_phone(args, contacts):
@@ -187,20 +209,30 @@ def delete_record(args, contacts: AddressBook):
 
 @input_error
 def show_all(contacts: AddressBook):
-    contacts.show_all()
+    return contacts.show_all()
     
 @input_error
-def add_birthday(args, book):
-    pass
+def add_birthday(args, book: AddressBook):
+    name,bd=args
+    record = book.find(name)
+    if record is not None:
+        record.add_birthday(bd)
+        return 'Birthday added'
+    else:
+        return 'Record not found'
 
 @input_error
 def show_birthday(args, book):
-    pass
+    name=args[0]
+    record = book.find(name)
+    if record is not None:
+        return f"Contact name: {record.name}, birthday: {record.birthday}"
+    else:
+        return 'Record not found'
 
 @input_error
-def birthdays(args, book):
-    pass
-
+def birthdays(book: AddressBook):
+    return book.birthdays()
 
 def main():
     book = AddressBook()
@@ -214,6 +246,12 @@ def main():
                 print('How can I help you?')
             case 'add':
                 print(add_record(args,book))
+            case 'add_birthday':
+                print(add_birthday(args,book))
+            case 'show_birthday':
+                print(show_birthday(args,book))
+            case 'birthdays':
+                print(birthdays(book))
             case 'change':
                 print(edit_phone(args,book))
             case 'phone':
