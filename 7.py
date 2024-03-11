@@ -85,6 +85,7 @@ class Record:
             if ph.value==old_phone:
                 if Phone.is_valid_number(new_phone):
                     ph.value = new_phone
+                    return 1
                 else:
                     raise ValueError("Incorrect phone number")
         return 0
@@ -187,8 +188,10 @@ def edit_phone(args, contacts):
     else :
         raise ValueError ('Insufficient parameters')
     if name in contacts:
-        contacts[name].edit_phone(old_phone,new_phone)
-        return "Record change."
+        if contacts[name].edit_phone(old_phone,new_phone):
+            return "Record change."
+        else:
+            raise ValueError("Phone not found")
     return 'Record not found'
 
 @input_error
