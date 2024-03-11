@@ -2,9 +2,18 @@ from collections import UserDict
 import datetime as dt
 from datetime import datetime as dtdt
 from prettytable import PrettyTable
-import random
+import pickle
 
+def save_data(book, filename="addressbook.pkl"):
+    with open(filename, "wb") as f:
+        pickle.dump(book, f)
 
+def load_data(filename="addressbook.pkl"):
+    try:
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return AddressBook()
 class Field:
     def __init__(self, value):
         self.value = value
@@ -74,8 +83,10 @@ class Record:
     def edit_phone(self,old_phone: str, new_phone: str):
         for ph in self.phones:
             if ph.value==old_phone:
-                ph = Phone(new_phone)
-                return 1
+                if Phone.is_valid_number(new_phone):
+                    ph.value = new_phone
+                else:
+                    raise ValueError("Incorrect phone number")
         return 0
         
     def find_phone(self, phone: str) ->Phone:
@@ -101,11 +112,11 @@ class AddressBook(UserDict):
                 
     def show_all(self):
         table = PrettyTable()
-        table.field_names = ['Name','Phones']
+        table.field_names = ['Name','Phones','Birthday']
 
         for contact in self.data.values():
             ph = '\n'.join(p.value for p in contact.phones)
-            table.add_row([contact.name,ph])
+            table.add_row([contact.name,ph,contact.birthday])
         return table
     
     def birthdays(self):
@@ -118,7 +129,7 @@ class AddressBook(UserDict):
         end=dtdt.fromordinal(7+dtdt.toordinal(begin)).date()
         for i in self.data.values():
             # temp - birthday in current year
-            temp=dtdt.strptime(i.birthday, "%d.%m.%Y").date().replace(year=begin.year)
+            temp=i.birthday.value.replace(year=begin.year)
             if temp>=begin and temp<=end:
                 if temp.weekday()==5:
                     c=temp.replace(day=temp.day+2)
@@ -176,8 +187,8 @@ def edit_phone(args, contacts):
     else :
         raise ValueError ('Insufficient parameters')
     if name in contacts:
-        if contacts[name].edit_phone(old_phone,new_phone):
-            return "Record change."
+        contacts[name].edit_phone(old_phone,new_phone)
+        return "Record change."
     return 'Record not found'
 
 @input_error
@@ -235,7 +246,7 @@ def birthdays(book: AddressBook):
     return book.birthdays()
 
 def main():
-    book = AddressBook()
+    book = load_data()
     print("Welcome to the assistant bot!")
     while True:
         user_input = input("Enter a command: ")
@@ -246,9 +257,9 @@ def main():
                 print('How can I help you?')
             case 'add':
                 print(add_record(args,book))
-            case 'add_birthday':
+            case 'add-birthday':
                 print(add_birthday(args,book))
-            case 'show_birthday':
+            case 'show-birthday':
                 print(show_birthday(args,book))
             case 'birthdays':
                 print(birthdays(book))
@@ -258,14 +269,16 @@ def main():
                 print(find_record(args,book))
             case 'delete':
                 print(delete_record(args,book))
-            case 'delete_phone':
+            case 'delete-phone':
                 print(delete_phone(args, book))
             case 'all':
                 print(show_all(book))
             case 'close':
+                save_data(book)
                 print('Good bye!')
                 break
             case 'exit':
+                save_data(book)
                 print('Good bye!')
                 break
             case _:
